@@ -146,14 +146,42 @@ export async function handleContent(url, method = 'GET', fetcher = fetch) {
         return json({ items: data.data.map(normalizeManga), total: data.total, offset, limit: 20 });
       }
       case 'manga': return json(normalizeManga(await safeManga(q.get('id'), fetcher)));
-      case 'chapters': {
+           case 'chapters': {
         const mangaId = id(q.get('id'));
         await safeManga(mangaId, fetcher);
+
         const offset = number(q.get('offset'), 0, 0, 9900);
-        const data = await api(`/manga/${mangaId}/feed`, { limit: 100, offset, 'translatedLanguage[]': ['en'],
-          'contentRating[]': ['safe'], 'includes[]': ['scanlation_group'], 'order[chapter]': 'asc',
-          'order[volume]': 'asc', includeExternalUrl: 0, includeEmptyPages: 0 }, 60000, fetcher);
-        return json({ items: data.data.filter(c => c.attributes.pages > 0 && !c.attributes.externalUrl).map(normalizeChapter), total: data.total, offset, limit: 100 });
+
+        const data = await api(`/manga/${mangaId}/feed`, {
+          limit: 100,
+          offset,
+          'translatedLanguage[]': ['en'],
+          'contentRating[]': ['safe'],
+          'includes[]': ['scanlation_group'],
+
+          ...(q.get('sort') === 'latest'
+            ? { 'order[publishAt]': 'desc' }
+            : {
+                'order[chapter]': 'asc',
+                'order[volume]': 'asc',
+              }),
+
+          includeExternalUrl: 0,
+          includeEmptyPages: 0,
+        }, 60000, fetcher);
+
+        return json({
+          items: data.data
+            .filter(
+              chapter =>
+                chapter.attributes.pages > 0 &&
+                !chapter.attributes.externalUrl
+            )
+            .map(normalizeChapter),
+          total: data.total,
+          offset,
+          limit: 100,
+        });
       }
       case 'chapter': {
         const chapterId = id(q.get('id'));

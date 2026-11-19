@@ -8,7 +8,14 @@ import '@fontsource/inter/latin-700.css';
 import './styles.css';
 import App from './App.jsx';
 import { AppProvider } from './lib/state.jsx';
+import { QihonExtrasProvider } from './components/QihonExtras';
 
 createRoot(document.getElementById('root')).render(
-  <BrowserRouter><AppProvider><App /></AppProvider></BrowserRouter>
+  <BrowserRouter>
+    <AppProvider>
+      <QihonExtrasProvider>
+        <App />
+      </QihonExtrasProvider>
+    </AppProvider>
+  </BrowserRouter>
 );

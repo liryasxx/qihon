@@ -7,6 +7,12 @@ import Icon from './components/Icon';
 import { Attribution, Cover, Empty, ErrorState, Loading, MangaCard } from './components/UI';
 import ProfilePhoto from './components/ProfilePhoto';
 import HeaderAvatar from './components/HeaderAvatar';
+import {
+  NotificationBell,
+  NotificationsPage,
+  CheckoutPage,
+  DiamondWalletCard,
+} from './components/QihonExtras';
 
 function useResource(loader, deps) {
   const [state, setState] = useState({ loading: true, value: null, error: '' });
@@ -38,14 +44,7 @@ function Header() {
         <Navigation className="desktop-nav" />
 
         <div className="header-actions">
-          <Link
-            className="icon-button"
-            to="/browse"
-            aria-label="Search manhwa"
-          >
-            <Icon name="search" />
-          </Link>
-
+          <NotificationBell />
           <HeaderAvatar />
         </div>
       </div>
@@ -144,6 +143,8 @@ function Profile() {
   useEffect(() => setName(user?.user_metadata?.display_name || ''), [user?.id]);
   if (authLoading) return <main className="page"><Loading text="Checking your account…"/></main>;
   return <main className="page profile-page"><div className="page-heading"><span className="eyebrow">Make yourself at home</span><h1>Your Profile</h1></div><section className="profile-card"><ProfilePhoto /><h2>{user ? name || 'Qihon reader' : 'Hello, reader.'}</h2><p>{user ? user.email : 'A good story is even better when you can keep your place.'}</p>{!user && <Link className="button primary" to="/auth">Sign in or create an account</Link>}</section>
+    <DiamondWalletCard />
+
     <section className="stats-grid"><div><strong>{data.bookmarks.length}</strong><span>Saved stories</span></div><div><strong>{data.history.length}</strong><span>Stories started</span></div></section>
     {user && <form className="settings-card" onSubmit={async e => { e.preventDefault(); setBusy(true); const { error } = await supabase.auth.updateUser({ data: { display_name: name.trim() } }); setBusy(false); notify(error ? error.message : 'Profile updated'); }}><h2>Account details</h2><label>Display name<input maxLength={60} required value={name} onChange={e => setName(e.target.value)} autoComplete="nickname"/></label><button className="button secondary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></form>}
     <section className="settings-card"><h2>About Qihon</h2><p>A manhwa reader made for your next chapter. This first version reads freely accessible English chapters from MangaDex.</p><p>{user ? 'Your signed-in library is stored with Supabase.' : 'Guest bookmarks and progress stay in this browser. Signing in opens your account library; guest items are kept separately.'}</p><p>Install Qihon using your browser’s Install app or Add to Home Screen option. Reading chapters requires an internet connection.</p><Link className="text-button" to="/about">Content credits & support</Link></section>
@@ -226,7 +227,9 @@ function Reader() {
   <Icon name="eye" />
 </button>
 
-<HeaderAvatar /></header>
+<NotificationBell />
+<HeaderAvatar />
+</header>
     <div className="reader-intro"><span className="eyebrow">Chapter {chapter.number}</span><h1>{chapter.title || manga.title}</h1><p>{pages.length} pages · English</p><Attribution groups={chapter.groups}/>{saved?.page > 0 && <button className="button secondary" onClick={() => document.getElementById(`page-${saved.page + 1}`)?.scrollIntoView()}>Resume at page {saved.page + 1}</button>}</div>
     <div className="reader-pages">{pages.map((src, i) => <ReaderPage key={`${id}-${i}`} src={src} index={i} onVisible={onVisible}/>)}</div>
     <section className="chapter-end"><span className="eyebrow">You’ve reached the end</span><h2>One more chapter?</h2><Attribution groups={chapter.groups}/><div className="chapter-navigation">{prev && <Link className="button secondary" to={`/read/${prev.id}?offset=${offset}`}>Previous chapter</Link>}{next ? <Link className="button primary" to={`/read/${next.id}?offset=${offset}`}>Next chapter</Link> : <Link className="button primary" to={`/title/${manga.id}?offset=${index === list.length - 1 && chapters.value?.total > offset + 100 ? offset + 100 : offset}`}>View chapter list</Link>}</div></section>
@@ -242,5 +245,7 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => { if (!isReader) window.scrollTo(0, 0); }, [location.pathname, isReader]);
   useEffect(() => { const update = () => setOnline(navigator.onLine); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
-  return <><a href="#main-content" className="skip-link">Skip to content</a>{!isReader && <Header/>}{!online && <div className="offline-banner" role="status">You’re offline. Live chapters and account sync need a connection.</div>}<div id="main-content"><Routes><Route path="/" element={<Home/>}/><Route path="/browse" element={<Browse/>}/><Route path="/title/:id" element={<Details/>}/><Route path="/read/:id" element={<Reader/>}/><Route path="/library" element={<Library/>}/><Route path="/profile" element={<Profile/>}/><Route path="/auth" element={<Auth/>}/><Route path="/about" element={<About/>}/><Route path="*" element={<main className="page"><Empty title="This page wandered off" text="There are more stories waiting in Browse."/></main>}/></Routes></div>{!isReader && <Navigation className="bottom-nav"/>}<PwaPrompt/></>;
+  return <><a href="#main-content" className="skip-link">Skip to content</a>{!isReader && <Header/>}{!online && <div className="offline-banner" role="status">You’re offline. Live chapters and account sync need a connection.</div>}<div id="main-content"><Routes><Route path="/" element={<Home/>}/><Route path="/browse" element={<Browse/>}/><Route path="/title/:id" element={<Details/>}/><Route path="/read/:id" element={<Reader/>}/><Route path="/library" element={<Library/>}/><Route path="/profile" element={<Profile />} />
+<Route path="/notifications" element={<NotificationsPage />} />
+<Route path="/checkout" element={<CheckoutPage />} /><Route path="/auth" element={<Auth/>}/><Route path="/about" element={<About/>}/><Route path="*" element={<main className="page"><Empty title="This page wandered off" text="There are more stories waiting in Browse."/></main>}/></Routes></div>{!isReader && <Navigation className="bottom-nav"/>}<PwaPrompt/></>;
 }
