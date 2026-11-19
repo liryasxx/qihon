@@ -43,8 +43,8 @@ function Header() {
     <header className="header">
       <div className="header-inner">
         <Link to="/" className="brand" aria-label="Qihon home">
-          <span className="brand-mark qihon-logo" aria-hidden="true">
-  <span className="qihon-logo-letter">Q</span>
+          <span className="brand-mark qihon-book-mark" aria-hidden="true">
+  <Icon name="logo" size={28} />
 </span>
           <span>Qihon</span>
         </Link>
@@ -181,7 +181,8 @@ function Auth() {
   }
   function changeMode(next) { setMode(next); setError(''); setMessage(''); }
   return <main className="page auth-page"><Link className="back-link" to="/profile"><Icon name="back" size={20}/>Profile</Link><div className="auth-heading"><span className="brand-mark large qihon-logo" aria-hidden="true">
-  <span className="qihon-logo-letter">Q</span>
+  <span className="brand-mark large qihon-book-mark" aria-hidden="true"></span>
+  <Icon name="logo" size={46} />
 </span><span className="eyebrow">Your stories. Your space.</span><h1>{actualMode === 'signup' ? 'Start your story.' : actualMode === 'forgot' ? 'Forgot your password?' : actualMode === 'reset' ? 'Set a new password' : 'Welcome back.'}</h1><p>{actualMode === 'signup' ? 'Create an account to keep your library with you.' : actualMode === 'forgot' ? 'We’ll send a link to help you sign in again.' : 'Pick up right where you left off.'}</p></div>
     {!supabase ? <div className="settings-card setup-message"><Icon name="info"/><h2>Account connection needed</h2><p>Reading works now. To enable real sign-up and login, connect this project to your Supabase project using the two values in <code>.env.example</code> and run the included database setup.</p><p>The README has the exact steps. No account is created until Supabase is connected.</p><Link className="button primary" to="/browse">Explore manhwa</Link></div> : <form className="auth-form" onSubmit={submit}>{actualMode === 'signup' && <label>Display name<input autoComplete="nickname" value={displayName} maxLength={60} required onChange={e => setDisplayName(e.target.value)} placeholder="What should we call you?"/></label>}{actualMode !== 'reset' && <label>Email address<input type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"/></label>}{actualMode !== 'forgot' && <label>Password<input type="password" required minLength={8} autoComplete={actualMode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters"/></label>}{error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}<button className="button primary full-width" disabled={busy}>{busy ? 'Please wait…' : actualMode === 'signup' ? 'Create account' : actualMode === 'forgot' ? 'Send reset link' : actualMode === 'reset' ? 'Update password' : 'Sign in'}</button>{actualMode === 'login' && <button type="button" className="text-button" onClick={() => changeMode('forgot')}>Forgot password?</button>}{!recovery && <p className="auth-switch">{actualMode === 'signup' ? 'Already have an account?' : 'New to Qihon?'} <button type="button" className="text-button" onClick={() => changeMode(actualMode === 'signup' ? 'login' : 'signup')}>{actualMode === 'signup' ? 'Sign in' : 'Create an account'}</button></p>}</form>}
   </main>;

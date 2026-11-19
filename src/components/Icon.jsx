@@ -1,5 +1,33 @@
 // Small, local line icons keep the first prototype independent of a remote icon CDN.
 const paths = {
+  logo: (
+    <>
+      <path
+        d="M11.1 6.6C8.8 5.1 6.1 4.6 3.5 5.2c-.6.1-1 .6-1 1.2v11.3c0 .7.6 1.1 1.2 1 2.5-.5 5-.1 7.4 1.4V6.6Z"
+        fill="currentColor"
+        stroke="none"
+      />
+
+      <path
+        d="M12.9 6.6c2.3-1.5 5-2 7.6-1.4.6.1 1 .6 1 1.2v11.3c0 .7-.6 1.1-1.2 1-2.5-.5-5-.1-7.4 1.4V6.6Z"
+        fill="currentColor"
+        stroke="none"
+      />
+
+      <path
+        d="M5.2 8.8c1.2-.1 2.3.1 3.4.6m-3.4 2.4c1.2-.1 2.3.1 3.4.6m6.8-3c1.1-.5 2.2-.7 3.4-.6m-3.4 3.6c1.1-.5 2.2-.7 3.4-.6"
+        stroke="#242729"
+        strokeWidth="1.15"
+      />
+
+      <path
+        d="M3.5 20.5c2.7-.5 5.3-.1 7.6 1.2m2 0c2.3-1.3 4.9-1.7 7.6-1.2"
+        stroke="currentColor"
+        strokeWidth="1"
+        opacity=".45"
+      />
+    </>
+  ),
   book: <><path d="M12 7c-3-2-6-2-9-1v13c3-1 6-1 9 1 3-2 6-2 9-1V6c-3-1-6-1-9 1Z"/><path d="M12 7v13M6 9h3M6 12h3M15 9h3M15 12h3"/></>,
   home: <><path d="m3 10 9-7 9 7v11h-6v-7H9v7H3Z"/></>,
   compass: <><circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5Z"/></>,
