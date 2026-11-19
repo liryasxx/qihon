@@ -1839,3 +1839,70 @@ body {
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* Fill the available screen width on phones */
+@media (max-width: 767px) {
+  html,
+  body {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    background: var(--bg);
+  }
+
+  #root {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .page,
+  .header-inner,
+  .reader,
+  .reader-intro,
+  .reader-pages,
+  .chapter-end {
+    width: 100%;
+    max-width: none;
+  }
+
+  .page {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: calc(
+      112px + env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  .header-inner {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .bottom-nav,
+  .reader-toolbar {
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: none;
+    transform: none;
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .controls-hidden .reader-toolbar {
+    transform: translateY(100%);
+  }
+
+  .pwa-banner {
+    width: calc(100% - 24px);
+    max-width: calc(100% - 24px);
+  }
+
+  .toast {
+    max-width: calc(100% - 32px);
+    bottom: calc(98px + env(safe-area-inset-bottom, 0px));
+  }
+}
