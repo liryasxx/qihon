@@ -6,6 +6,7 @@ import { supabase, useApp } from './lib/state';
 import Icon from './components/Icon';
 import { Attribution, Cover, Empty, ErrorState, Loading, MangaCard } from './components/UI';
 import ProfilePhoto from './components/ProfilePhoto';
+import HeaderAvatar from './components/HeaderAvatar';
 
 function useResource(loader, deps) {
   const [state, setState] = useState({ loading: true, value: null, error: '' });
@@ -24,8 +25,32 @@ function Navigation({ className = '' }) {
   return <nav className={className} aria-label="Main navigation">{navItems.map(([to, icon, name]) => <NavLink key={to} to={to} end={to === '/'}><Icon name={icon}/><span>{name}</span></NavLink>)}</nav>;
 }
 function Header() {
-  const { user } = useApp();
-  return <header className="header"><div className="header-inner"><Link to="/" className="brand" aria-label="Qihon home"><span className="brand-mark"><Icon name="book" size={25}/></span><span>Qihon</span></Link><Navigation className="desktop-nav"/><div className="header-actions"><Link className="icon-button" to="/browse" aria-label="Search manhwa"><Icon name="search"/></Link><Link className="avatar" to="/profile" aria-label={user ? 'Your profile' : 'Sign in'}>{user?.user_metadata?.display_name?.slice(0, 1).toUpperCase() || <Icon name="user" size={19}/>}</Link></div></div></header>;
+  return (
+    <header className="header">
+      <div className="header-inner">
+        <Link to="/" className="brand" aria-label="Qihon home">
+          <span className="brand-mark">
+            <Icon name="book" size={25} />
+          </span>
+          <span>Qihon</span>
+        </Link>
+
+        <Navigation className="desktop-nav" />
+
+        <div className="header-actions">
+          <Link
+            className="icon-button"
+            to="/browse"
+            aria-label="Search manhwa"
+          >
+            <Icon name="search" />
+          </Link>
+
+          <HeaderAvatar />
+        </div>
+      </div>
+    </header>
+  );
 }
 function PwaPrompt() {
   const [installEvent, setInstallEvent] = useState(null);
@@ -192,7 +217,16 @@ function Reader() {
   const index = list.findIndex(c => c.id === id);
   const prev = index > 0 ? list.slice(0, index).reverse().find(c => c.number !== chapter.number) : null;
   const next = index >= 0 ? list.slice(index + 1).find(c => c.number !== chapter.number) : null;
-  return <main className={`reader ${showControls ? '' : 'controls-hidden'}`}><header className="reader-header"><Link className="icon-button" to={`/title/${manga.id}?offset=${offset}`} aria-label="Back to chapter list"><Icon name="back"/></Link><div><Link to={`/title/${manga.id}`}>{manga.title}</Link><p>Chapter {chapter.number}{chapter.title ? ` · ${chapter.title}` : ''}</p></div><button className="icon-button" aria-label={showControls ? 'Hide reader controls' : 'Show reader controls'} aria-pressed={!showControls} onClick={() => setShowControls(!showControls)}><Icon name="eye"/></button></header>
+  return <main className={`reader ${showControls ? '' : 'controls-hidden'}`}><header className="reader-header"><Link className="icon-button" to={`/title/${manga.id}?offset=${offset}`} aria-label="Back to chapter list"><Icon name="back"/></Link><div><Link to={`/title/${manga.id}`}>{manga.title}</Link><p>Chapter {chapter.number}{chapter.title ? ` · ${chapter.title}` : ''}</p></div><button
+  className="icon-button reader-toggle"
+  aria-label={showControls ? 'Hide reader controls' : 'Show reader controls'}
+  aria-pressed={!showControls}
+  onClick={() => setShowControls(!showControls)}
+>
+  <Icon name="eye" />
+</button>
+
+<HeaderAvatar /></header>
     <div className="reader-intro"><span className="eyebrow">Chapter {chapter.number}</span><h1>{chapter.title || manga.title}</h1><p>{pages.length} pages · English</p><Attribution groups={chapter.groups}/>{saved?.page > 0 && <button className="button secondary" onClick={() => document.getElementById(`page-${saved.page + 1}`)?.scrollIntoView()}>Resume at page {saved.page + 1}</button>}</div>
     <div className="reader-pages">{pages.map((src, i) => <ReaderPage key={`${id}-${i}`} src={src} index={i} onVisible={onVisible}/>)}</div>
     <section className="chapter-end"><span className="eyebrow">You’ve reached the end</span><h2>One more chapter?</h2><Attribution groups={chapter.groups}/><div className="chapter-navigation">{prev && <Link className="button secondary" to={`/read/${prev.id}?offset=${offset}`}>Previous chapter</Link>}{next ? <Link className="button primary" to={`/read/${next.id}?offset=${offset}`}>Next chapter</Link> : <Link className="button primary" to={`/title/${manga.id}?offset=${index === list.length - 1 && chapters.value?.total > offset + 100 ? offset + 100 : offset}`}>View chapter list</Link>}</div></section>
