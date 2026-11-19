@@ -1919,3 +1919,29 @@ body {
   object-fit: cover;
   border-radius: inherit;
 }
+
+.brand-mark.qihon-logo {
+  flex-shrink: 0;
+  border: 1px solid #414446;
+  border-radius: 10px;
+  background: #26292b;
+  color: #f3f1ed;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+.qihon-logo-letter {
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  transform: translate(-0.5px, -1px);
+}
+
+.brand-mark.large.qihon-logo {
+  border-radius: 18px;
+}
+
+.brand-mark.large .qihon-logo-letter {
+  font-size: 46px;
+}
