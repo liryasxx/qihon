@@ -19,6 +19,7 @@ import {
 import Icon from './Icon';
 import { Cover, Loading } from './UI';
 import './QihonExtras.css';
+import { useDiamondWallet } from '../lib/useDiamondWallet';
 
 const Extras = createContext(null);
 
@@ -169,6 +170,7 @@ function relativeDate(date) {
 }
 
 export function QihonExtrasProvider({ children }) {
+  const diamondWallet = useDiamondWallet();
   const { user, authLoading, data, dataLoading } = useApp();
 
   const owner = authLoading
@@ -180,9 +182,15 @@ export function QihonExtrasProvider({ children }) {
     value: loadSaved(owner),
   }));
 
-  const value = saved.owner === owner
-    ? saved.value
-    : blank();
+    const value = {
+    ...(saved.owner === owner ? saved.value : blank()),
+    ...(user ? diamondWallet.value : {}),
+    walletLoading: !!user && diamondWallet.loading,
+    walletBusy: !!user && diamondWallet.busy,
+    walletError: user ? diamondWallet.error : '',
+    walletSynced: !!user,
+    retryWallet: diamondWallet.refresh,
+  };
 
   const [feed, setFeed] = useState({
     owner: '',
@@ -381,7 +389,10 @@ const favoritesKey = favorites
     unread: !value.read.includes(item.id),
   }));
 
-  function completeDemo(packId, methodId, chapter) {
+    function completeDemo(packId, methodId, chapter) {
+    if (user) {
+      return diamondWallet.completeDemo(packId, methodId, chapter);
+    }
     const pack = packs.find(item => item.id === packId);
     const method = methods.find(item => item.id === methodId);
 
@@ -435,7 +446,10 @@ const favoritesKey = favorites
     return id;
   }
 
-  function unlockDemo(target, freePass = false) {
+    function unlockDemo(target, freePass = false) {
+    if (user) {
+      return diamondWallet.unlockDemo(target, freePass);
+    }
     update(previous => {
       if (previous.unlocked.includes(target.key)) {
         return previous;
@@ -531,6 +545,7 @@ export function NotificationBell() {
 }
 
 export function DiamondWalletCard() {
+  const walletStatus = useQihonExtras();
   const { balance } = useQihonExtras();
 
   return (
@@ -541,8 +556,26 @@ export function DiamondWalletCard() {
 
       <div>
         <span>DIAMOND BALANCE</span>
-        <strong>{balance.toLocaleString()}</strong>
-        <small>Demo balance · This device</small>
+        <strong>{walletStatus.walletLoading ? '…' : balance.toLocaleString()}</strong>
+        <small>
+  {walletStatus.walletLoading
+    ? 'Syncing wallet…'
+    : walletStatus.walletError
+      ? 'Could not sync wallet'
+      : walletStatus.walletSynced
+        ? 'Demo balance · Account synced'
+        : 'Demo balance · This device'}
+</small>
+
+{walletStatus.walletError && (
+  <button
+    type="button"
+    className="text-button"
+    onClick={walletStatus.retryWallet}
+  >
+    Retry sync
+  </button>
+)}
       </div>
 
       <Link className="button primary" to="/checkout">
@@ -741,6 +774,7 @@ export function NotificationsPage() {
 }
 
 export function CheckoutPage() {
+  const walletStatus = useQihonExtras();
   const {
     balance,
     orders,
@@ -845,26 +879,36 @@ export function CheckoutPage() {
     ? `/read/${target.id}`
     : '/profile';
 
-  function pay(event) {
+  async function pay(event) {
     event.preventDefault();
 
-    if (!ready || submitting.current) return;
+    if (
+      !ready ||
+      walletStatus.walletLoading ||
+      walletStatus.walletBusy ||
+      submitting.current
+    ) {
+      return;
+    }
 
     submitting.current = true;
+    setError('');
 
     try {
-      const orderId = completeDemo(
+      const newReceiptId = await completeDemo(
         packId,
         methodId,
         target ? { ...target, cost } : null
       );
 
-      setParams({ receipt: orderId });
+      setParams({
+        receipt: newReceiptId,
+      });
     } catch (err) {
       setError(
         err.message || 'Could not complete the demo.'
       );
-
+        } finally {
       submitting.current = false;
     }
   }
@@ -993,7 +1037,7 @@ export function CheckoutPage() {
 
       <p className="q-demo-notice">
         <strong>Demo checkout</strong> — no money is
-        charged. Balances and unlocks stay on this device.
+        charged. Sign in to sync your balance and unlocked chapters across devices.
       </p>
 
       {chapterId && !ready && !error && (
@@ -1201,6 +1245,7 @@ export function CheckoutPage() {
             <button
               className="button primary full-width q-pay-button"
               type="submit"
+disabled={walletStatus.walletLoading || walletStatus.walletBusy}
             >
               Demo: Pay {money(pack.price)}
               {cost
