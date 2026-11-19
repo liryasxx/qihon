@@ -103,8 +103,11 @@ async function safeChapter(chapterId, fetcher) {
   const result = await api(`/chapter/${id(chapterId)}`, { 'includes[]': ['scanlation_group'] }, 300000, fetcher);
   const chapter = result.data;
   const mangaId = chapter.relationships?.find(r => r.type === 'manga')?.id;
-  if (chapter.attributes.translatedLanguage !== 'en' || !chapter.attributes.pages || chapter.attributes.externalUrl) {
-    throw new ContentError('An English image chapter is not available here. Choose another chapter.', 404);
+    if (!(chapter.attributes.pages > 0) || chapter.attributes.externalUrl) {
+    throw new ContentError(
+      'Image pages are not available for this chapter. Choose another chapter.',
+      404
+    );
   }
   const manga = await safeManga(mangaId, fetcher);
   return { chapter, manga };
@@ -154,7 +157,70 @@ export async function handleContent(url, method = 'GET', fetcher = fetch) {
         const data = await api('/manga', params, 60000, fetcher);
         return json({ items: data.data.map(normalizeManga), total: data.total, offset, limit: 20 });
       }
-      case 'manga': return json(normalizeManga(await safeManga(q.get('id'), fetcher)));
+            case 'manga':
+        return json(
+          normalizeManga(await safeManga(q.get('id'), fetcher))
+        );
+
+      case 'languages': {
+        const mangaId = id(q.get('id'));
+        const manga = await safeManga(mangaId, fetcher);
+
+        const params = {
+          limit: 500,
+          offset: 0,
+          'contentRating[]': ['safe'],
+          includeExternalUrl: 0,
+          includeEmptyPages: 0,
+          includeFuturePublishAt: 0,
+        };
+
+        const readable = chapter =>
+          chapter.attributes.pages > 0 &&
+          !chapter.attributes.externalUrl &&
+          /^[a-z]{2}(?:-[a-z]{2})?$/.test(
+            chapter.attributes.translatedLanguage || ''
+          );
+
+        const feed = await api(
+          `/manga/${mangaId}/feed`,
+          params,
+          300000,
+          fetcher
+        );
+
+        const available = new Set(
+          feed.data
+            .filter(readable)
+            .map(chapter => chapter.attributes.translatedLanguage)
+        );
+
+        // Check languages absent from the first batch on larger titles.
+        if (feed.total > feed.data.length) {
+          for (const language of normalizeManga(manga).languages) {
+            if (available.has(language)) continue;
+
+            const probe = await api(
+              `/manga/${mangaId}/feed`,
+              {
+                ...params,
+                limit: 1,
+                'translatedLanguage[]': [language],
+              },
+              300000,
+              fetcher
+            );
+
+            if (probe.data.some(readable)) {
+              available.add(language);
+            }
+          }
+        }
+
+        return json({
+          items: [...available].sort(),
+        });
+      }
                  case 'chapters': {
         const mangaId = id(q.get('id'));
         const language = (q.get('lang') || 'en').toLowerCase();

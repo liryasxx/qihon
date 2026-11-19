@@ -39,27 +39,26 @@ function useChapters(id, preferred) {
     setState({ key, loading: true });
 
     (async () => {
-      const manga = await content(
-        'manga',
-        { id },
-        controller.signal
-      );
+            const [manga, available] = await Promise.all([
+        content('manga', { id }, controller.signal),
+        content('languages', { id }, controller.signal),
+      ]);
 
-      const languages = [
-        ...new Set(['en', ...(manga.languages || [])]),
-      ];
+      const languages = available.items;
 
       const language = languages.includes(preferred)
         ? preferred
-        : manga.languages?.includes('en')
+        : languages.includes('en')
           ? 'en'
-          : manga.languages?.[0] || 'en';
+          : languages[0] || '';
 
-      const chapters = await loadChapterIndex(
-        id,
-        controller.signal,
-        language
-      );
+      const chapters = language
+        ? await loadChapterIndex(
+            id,
+            controller.signal,
+            language
+          )
+        : [];
 
       if (!controller.signal.aborted) {
         setState({
@@ -252,7 +251,7 @@ export default function ManhwaDetails() {
 
         <div>
           <span className="eyebrow">
-            MangaDex · {languageName(language)}
+            MangaDex{language ? ` · ${languageName(language)}` : ''}
           </span>
 
           <h1>{manga.title}</h1>
@@ -287,16 +286,23 @@ export default function ManhwaDetails() {
         </button>
       </section>
 
-      <section className="chapter-language-panel">
+            <section className="chapter-language-panel">
         <label htmlFor="chapter-language">
-          Chapter language
+          Language
         </label>
 
         <select
           id="chapter-language"
           value={language}
+          disabled={!languages.length}
           onChange={event => changeLanguage(event.target.value)}
         >
+          {!languages.length && (
+            <option value="">
+              No readable chapters
+            </option>
+          )}
+
           {[...languages]
             .sort((a, b) =>
               languageName(a).localeCompare(languageName(b))
@@ -307,11 +313,6 @@ export default function ManhwaDetails() {
               </option>
             ))}
         </select>
-
-        <p>
-          Chapter images stay in the language you choose.
-          Availability depends on MangaDex uploads.
-        </p>
       </section>
 
       {chapters.length > 0 && (
@@ -532,10 +533,9 @@ export default function ManhwaDetails() {
           </>
         ) : (
           <div className="notice">
-            <p>
-              No readable chapter images were returned in{' '}
-              {languageName(language)}.
-              Choose another language above.
+                        <p>
+              No readable chapter images are currently available
+              in the selected language for this title.
             </p>
 
             <a
