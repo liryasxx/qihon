@@ -7,6 +7,14 @@ import Icon from './components/Icon';
 import { Attribution, Cover, Empty, ErrorState, Loading, MangaCard } from './components/UI';
 import ProfilePhoto from './components/ProfilePhoto';
 import HeaderAvatar from './components/HeaderAvatar';
+
+import {
+  ReadingLibrary,
+  ReadingScreen,
+} from './components/ReadingFeatures';
+
+import ManhwaDetails from './components/ManhwaDetails';
+
 import {
   NotificationBell,
   NotificationsPage,
@@ -241,11 +249,36 @@ function About() {
 }
 export default function App() {
   const location = useLocation();
-  const isReader = location.pathname.startsWith('/read/');
+  const isReader =
+  location.pathname.startsWith('/read/') ||
+  location.pathname.startsWith('/offline/');
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => { if (!isReader) window.scrollTo(0, 0); }, [location.pathname, isReader]);
   useEffect(() => { const update = () => setOnline(navigator.onLine); window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); }; }, []);
-  return <><a href="#main-content" className="skip-link">Skip to content</a>{!isReader && <Header/>}{!online && <div className="offline-banner" role="status">You’re offline. Live chapters and account sync need a connection.</div>}<div id="main-content"><Routes><Route path="/" element={<Home/>}/><Route path="/browse" element={<Browse/>}/><Route path="/title/:id" element={<Details/>}/><Route path="/read/:id" element={<Reader/>}/><Route path="/library" element={<Library/>}/><Route path="/profile" element={<Profile />} />
+  return <><a href="#main-content" className="skip-link">Skip to content</a>{!isReader && <Header/>}{!online && <div className="offline-banner" role="status">You’re offline. Live chapters and account sync need a connection.</div>}<div id="main-content"><Routes><Route path="/" element={<Home/>}/><Route path="/browse" element={<Browse/>}/><Route
+  path="/title/:id"
+  element={<ManhwaDetails />}
+/><Route
+  path="/read/:id"
+  element={<ReadingScreen />}
+/>
+
+<Route
+  path="/offline/:id"
+  element={<ReadingScreen />}
+/><Route
+  path="/library"
+  element={
+    <ReadingLibrary
+      renderCard={(manga, progress) => (
+        <LibraryCard
+          manga={manga}
+          progress={progress}
+        />
+      )}
+    />
+  }
+/><Route path="/profile" element={<Profile />} />
 <Route path="/notifications" element={<NotificationsPage />} />
 <Route path="/checkout" element={<CheckoutPage />} /><Route path="/auth" element={<Auth/>}/><Route path="/about" element={<About/>}/><Route path="*" element={<main className="page"><Empty title="This page wandered off" text="There are more stories waiting in Browse."/></main>}/></Routes></div>{!isReader && <Navigation className="bottom-nav"/>}<PwaPrompt/></>;
 }

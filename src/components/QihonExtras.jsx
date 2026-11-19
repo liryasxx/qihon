@@ -5,14 +5,24 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+
+import { Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../lib/state';
 import { content } from '../lib/api';
+
+import {
+  loadChapterIndex,
+  chapterTarget,
+  isDemoLocked,
+} from '../lib/reading';
+
 import Icon from './Icon';
 import { Cover, Loading } from './UI';
 import './QihonExtras.css';
 
 const Extras = createContext(null);
+
+export const useQihonExtras = () => useContext(Extras);
 
 const packs = [
   {
@@ -68,6 +78,7 @@ const blank = () => ({
   balance: 0,
   orders: [],
   unlocked: [],
+  lastPassAt: 0,
 });
 
 function loadSaved(owner) {
@@ -138,7 +149,9 @@ function MiniIcon({ name, size = 22 }) {
 }
 
 function relativeDate(date) {
-  if (!date || Number.isNaN(Date.parse(date))) return 'Recently';
+  if (!date || Number.isNaN(Date.parse(date))) {
+    return 'Recently';
+  }
 
   const seconds = Math.max(
     0,
@@ -157,14 +170,19 @@ function relativeDate(date) {
 
 export function QihonExtrasProvider({ children }) {
   const { user, authLoading, data, dataLoading } = useApp();
-  const owner = authLoading ? 'loading' : user?.id || 'guest';
+
+  const owner = authLoading
+    ? 'loading'
+    : user?.id || 'guest';
 
   const [saved, setSaved] = useState(() => ({
     owner,
     value: loadSaved(owner),
   }));
 
-  const value = saved.owner === owner ? saved.value : blank();
+  const value = saved.owner === owner
+    ? saved.value
+    : blank();
 
   const [feed, setFeed] = useState({
     owner: '',
@@ -175,11 +193,24 @@ export function QihonExtrasProvider({ children }) {
   });
 
   const [refreshKey, setRefreshKey] = useState(0);
-  const favorites = data.bookmarks.slice(0, 10);
-  const favoritesKey = favorites.map(manga => manga.id).join(',');
+
+  const favorites = data.bookmarks.slice(0, 10).map(manga => ({
+  ...manga,
+  readingLanguage:
+    data.history.find(item => item.id === manga.id)?.readingLanguage ||
+    manga.readingLanguage ||
+    'en',
+}));
+
+const favoritesKey = favorites
+  .map(manga => `${manga.id}:${manga.readingLanguage}`)
+  .join(',');
 
   useEffect(() => {
-    setSaved({ owner, value: loadSaved(owner) });
+    setSaved({
+      owner,
+      value: loadSaved(owner),
+    });
   }, [owner]);
 
   useEffect(() => {
@@ -191,7 +222,7 @@ export function QihonExtrasProvider({ children }) {
         JSON.stringify(saved.value)
       );
     } catch {
-      // The current session remains usable if device storage is unavailable.
+      // Keep the current session usable if storage is unavailable.
     }
   }, [saved, owner, authLoading]);
 
@@ -224,12 +255,17 @@ export function QihonExtrasProvider({ children }) {
       const results = await Promise.allSettled(
         favorites.map(async manga => {
           const result = await content(
-            'chapters',
-            { id: manga.id, sort: 'latest' },
-            controller.signal
-          );
+  'chapters',
+  {
+    id: manga.id,
+    sort: 'latest',
+    lang: manga.readingLanguage || 'en',
+  },
+  controller.signal
+);
 
           const chapter = result.items[0];
+
           if (!chapter) return null;
 
           return {
@@ -258,7 +294,8 @@ export function QihonExtrasProvider({ children }) {
 
       items.sort(
         (a, b) =>
-          (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0)
+          (Date.parse(b.date) || 0) -
+          (Date.parse(a.date) || 0)
       );
 
       const failed = results.some(
@@ -298,6 +335,7 @@ export function QihonExtrasProvider({ children }) {
     };
 
     const timer = setInterval(refresh, 5 * 60 * 1000);
+
     document.addEventListener('visibilitychange', refresh);
 
     return () => {
@@ -348,21 +386,26 @@ export function QihonExtrasProvider({ children }) {
     const method = methods.find(item => item.id === methodId);
 
     if (!pack || !method) {
-      throw new Error('Choose a diamond pack and payment method.');
+      throw new Error(
+        'Choose a diamond pack and payment method.'
+      );
     }
 
-    const id = `DEMO-${Date.now()
-      .toString(36)
-      .toUpperCase()}-${Math.random()
-      .toString(36)
-      .slice(2, 6)
-      .toUpperCase()}`;
+    const id =
+      `DEMO-${Date.now().toString(36).toUpperCase()}-` +
+      Math.random().toString(36).slice(2, 6).toUpperCase();
 
     const date = new Date().toISOString();
 
     update(previous => {
+      const key = chapter?.key;
+
       const cost =
-        chapter && !previous.unlocked.includes(chapter) ? 30 : 0;
+        key &&
+        chapter.cost &&
+        !previous.unlocked.includes(key)
+          ? 30
+          : 0;
 
       const balance =
         previous.balance + pack.diamonds + pack.bonus - cost;
@@ -383,8 +426,8 @@ export function QihonExtrasProvider({ children }) {
         ...previous,
         balance,
         orders: [order, ...previous.orders].slice(0, 20),
-        unlocked: chapter
-          ? [...new Set([...previous.unlocked, chapter])]
+        unlocked: cost
+          ? [...new Set([...previous.unlocked, key])]
           : previous.unlocked,
       };
     });
@@ -392,61 +435,103 @@ export function QihonExtrasProvider({ children }) {
     return id;
   }
 
+  function unlockDemo(target, freePass = false) {
+    update(previous => {
+      if (previous.unlocked.includes(target.key)) {
+        return previous;
+      }
+
+      const unavailable = freePass
+        ? Date.now() - (previous.lastPassAt || 0) < 86400000
+        : previous.balance < 30;
+
+      if (unavailable) return previous;
+
+      return {
+        ...previous,
+        balance: previous.balance - (freePass ? 0 : 30),
+        lastPassAt: freePass
+          ? Date.now()
+          : previous.lastPassAt || 0,
+        unlocked: [...previous.unlocked, target.key],
+      };
+    });
+  }
+
+  const contextValue = {
+    ...value,
+    notifications,
+
+    loading:
+      authLoading ||
+      dataLoading ||
+      (feed.owner === owner && feed.loading),
+
+    error: feed.owner === owner ? feed.error : '',
+
+    limited: data.bookmarks.length > 10,
+
+    refresh: () => setRefreshKey(key => key + 1),
+
+    markRead: id =>
+      update(previous => ({
+        ...previous,
+        read: [
+          ...new Set([...previous.read, id]),
+        ].slice(-300),
+      })),
+
+    markAllRead: () =>
+      update(previous => ({
+        ...previous,
+        read: [
+          ...new Set([
+            ...previous.read,
+            ...notifications.map(item => item.id),
+          ]),
+        ].slice(-300),
+      })),
+
+    completeDemo,
+    unlockDemo,
+  };
+
   return (
-    <Extras.Provider
-      value={{
-        ...value,
-        notifications,
-        loading:
-          authLoading ||
-          dataLoading ||
-          (feed.owner === owner && feed.loading),
-        error: feed.owner === owner ? feed.error : '',
-        limited: data.bookmarks.length > 10,
-        refresh: () => setRefreshKey(key => key + 1),
-        markRead: id =>
-          update(previous => ({
-            ...previous,
-            read: [...new Set([...previous.read, id])].slice(-300),
-          })),
-        markAllRead: () =>
-          update(previous => ({
-            ...previous,
-            read: [
-              ...new Set([
-                ...previous.read,
-                ...notifications.map(item => item.id),
-              ]),
-            ].slice(-300),
-          })),
-        completeDemo,
-      }}
-    >
+    <Extras.Provider value={contextValue}>
       {children}
     </Extras.Provider>
   );
 }
 
 export function NotificationBell() {
-  const { notifications } = useContext(Extras);
-  const count = notifications.filter(item => item.unread).length;
+  const { notifications } = useQihonExtras();
+
+  const count = notifications.filter(
+    item => item.unread
+  ).length;
 
   return (
     <Link
       to="/notifications"
       className="icon-button q-notification-bell"
-      aria-label={`Notifications${count ? `, ${count} unread` : ''}`}
+      aria-label={`Notifications${
+        count ? `, ${count} unread` : ''
+      }`}
     >
       <MiniIcon name="bell" />
+
       {count > 0 && (
-        <span className="q-unread-dot" aria-hidden="true" />
+        <span
+          className="q-unread-dot"
+          aria-hidden="true"
+        />
       )}
     </Link>
   );
 }
 
 export function DiamondWalletCard() {
-  const { balance } = useContext(Extras);
+  const { balance } = useQihonExtras();
 
   return (
     <section className="q-wallet-card">
@@ -476,15 +561,16 @@ export function NotificationsPage() {
     refresh,
     markRead,
     markAllRead,
-  } = useContext(Extras);
+  } = useQihonExtras();
 
   const [filter, setFilter] = useState('all');
 
   const visible = notifications.filter(item =>
-    filter === 'all' ||
-    (filter === 'unread'
-      ? item.unread
-      : item.category === filter)
+    filter === 'all'
+      ? true
+      : filter === 'unread'
+        ? item.unread
+        : item.category === filter
   );
 
   const unread = notifications.some(item => item.unread);
@@ -535,6 +621,7 @@ export function NotificationsPage() {
 
       <div className="q-inbox-tools">
         <span>Latest chapters from your bookmarks</span>
+
         <button
           type="button"
           className="text-button"
@@ -551,12 +638,22 @@ export function NotificationsPage() {
         </p>
       )}
 
-      {loading && <Loading text="Checking chapter updates…" />}
-      {error && <p className="notice" role="alert">{error}</p>}
+      {loading && (
+        <Loading text="Checking chapter updates…" />
+      )}
+
+      {error && (
+        <p className="notice" role="alert">
+          {error}
+        </p>
+      )}
 
       <div className="q-notification-list">
         {visible.map(item => (
-          <article className="q-notification-card" key={item.id}>
+          <article
+            className="q-notification-card"
+            key={item.id}
+          >
             {item.manga ? (
               <Cover manga={item.manga} />
             ) : (
@@ -590,7 +687,8 @@ export function NotificationsPage() {
               </div>
 
               <p>
-                <strong>{item.title}</strong> — {item.text}
+                <strong>{item.title}</strong>
+                {' '}— {item.text}
               </p>
 
               <div className="q-notification-actions">
@@ -620,11 +718,14 @@ export function NotificationsPage() {
       {!loading && !visible.length && (
         <div className="q-caught-up">
           <Icon name="check" size={28} />
+
           <h2>You're completely caught up!</h2>
+
           <p>
-            New chapter notices appear here when Qihon checks
-            your bookmarked stories.
+            New chapter notices appear here when Qihon
+            checks your bookmarked stories.
           </p>
+
           <Link className="text-button" to="/browse">
             Browse manhwa
           </Link>
@@ -632,8 +733,8 @@ export function NotificationsPage() {
       )}
 
       <p className="q-secondary-note">
-        In-app updates refresh every five minutes while Qihon is
-        open. Read status is saved on this device.
+        In-app updates refresh every five minutes while
+        Qihon is open. Read status is saved on this device.
       </p>
     </main>
   );
@@ -645,25 +746,28 @@ export function CheckoutPage() {
     orders,
     unlocked,
     completeDemo,
-  } = useContext(Extras);
+    unlockDemo,
+  } = useQihonExtras();
 
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const [packId, setPackId] = useState('reader');
   const [methodId, setMethodId] = useState('gcash');
   const [error, setError] = useState('');
+  const [selection, setSelection] = useState(null);
+
   const submitting = useRef(false);
 
-  const pack = packs.find(item => item.id === packId);
-  const chapter = params.get('chapter') === '43' ? '43' : null;
-  const cost =
-    chapter && !unlocked.includes(chapter) ? 30 : 0;
-
-  const remaining =
-    balance + pack.diamonds + pack.bonus - cost;
-
+  const chapterId = params.get('unlock');
   const receiptId = params.get('receipt');
-  const receipt = orders.find(order => order.id === receiptId);
+
+  const receipt = orders.find(
+    order => order.id === receiptId
+  );
+
+  const pack = packs.find(
+    item => item.id === packId
+  );
+
   const query = params.toString();
 
   useEffect(() => {
@@ -671,18 +775,96 @@ export function CheckoutPage() {
     setError('');
   }, [query]);
 
+  useEffect(() => {
+    if (!chapterId || receiptId) return;
+
+    const controller = new AbortController();
+
+    setSelection(null);
+
+    async function loadSelection() {
+      const data = await content(
+        'chapter',
+        { id: chapterId },
+        controller.signal
+      );
+
+      const chapters = await loadChapterIndex(
+  data.manga.id,
+  controller.signal,
+  data.chapter.language || 'en'
+);
+
+      if (!controller.signal.aborted) {
+        setSelection({
+          id: chapterId,
+          data,
+          chapters,
+        });
+      }
+    }
+
+    loadSelection().catch(err => {
+      if (!controller.signal.aborted) {
+        setError(err.message);
+      }
+    });
+
+    return () => controller.abort();
+  }, [chapterId, receiptId]);
+
+  const selected =
+    selection?.id === chapterId
+      ? selection
+      : null;
+
+  const target = selected
+    ? chapterTarget(
+        selected.data.manga,
+        selected.data.chapter
+      )
+    : null;
+
+  const cost =
+    selected &&
+    isDemoLocked(
+      target.mangaId,
+      selected.data.chapter,
+      selected.chapters,
+      unlocked
+    )
+      ? 30
+      : 0;
+
+  const ready = !chapterId || !!selected;
+
+  const remaining =
+    balance + pack.diamonds + pack.bonus - cost;
+
+  const readLink = target
+    ? `/read/${target.id}`
+    : '/profile';
+
   function pay(event) {
     event.preventDefault();
-    if (submitting.current) return;
+
+    if (!ready || submitting.current) return;
 
     submitting.current = true;
 
     try {
-      setParams({
-        receipt: completeDemo(packId, methodId, chapter),
-      });
+      const orderId = completeDemo(
+        packId,
+        methodId,
+        target ? { ...target, cost } : null
+      );
+
+      setParams({ receipt: orderId });
     } catch (err) {
-      setError(err.message || 'Could not complete the demo.');
+      setError(
+        err.message || 'Could not complete the demo.'
+      );
+
       submitting.current = false;
     }
   }
@@ -692,7 +874,10 @@ export function CheckoutPage() {
       <main className="page q-checkout-page">
         <div className="q-demo-receipt">
           <Icon name="check" size={36} />
-          <span className="q-demo-label">DEMO RECEIPT</span>
+
+          <span className="q-demo-label">
+            DEMO RECEIPT
+          </span>
 
           <h1>
             {receipt
@@ -709,18 +894,22 @@ export function CheckoutPage() {
                   <dt>Reference</dt>
                   <dd>{receipt.id}</dd>
                 </div>
+
                 <div>
                   <dt>Pack</dt>
                   <dd>{receipt.packName}</dd>
                 </div>
+
                 <div>
                   <dt>Method</dt>
                   <dd>{receipt.methodName}</dd>
                 </div>
+
                 <div>
                   <dt>Simulated total</dt>
                   <dd>{money(receipt.price)}</dd>
                 </div>
+
                 <div>
                   <dt>Demo diamonds added</dt>
                   <dd>+{receipt.diamonds}</dd>
@@ -728,35 +917,53 @@ export function CheckoutPage() {
 
                 {receipt.cost > 0 && (
                   <div>
-                    <dt>Sample chapter unlock</dt>
+                    <dt>
+                      Chapter{' '}
+                      {receipt.chapter?.number || '43'}
+                      {' '}unlock
+                    </dt>
+
                     <dd>-{receipt.cost}</dd>
                   </div>
                 )}
 
                 <div>
                   <dt>Balance after this order</dt>
-                  <dd>{receipt.balance} diamonds</dd>
+                  <dd>
+                    {receipt.balance} diamonds
+                  </dd>
                 </div>
               </dl>
             </>
           ) : (
             <p>
-              Demo receipts are available only on the device and
-              account that created them.
+              This receipt is unavailable on this
+              device and account.
             </p>
           )}
 
-          <Link className="button primary" to="/profile">
+          {receipt?.chapter?.id && (
+            <Link
+              className="button primary"
+              to={`/read/${receipt.chapter.id}`}
+            >
+              Read Chapter {receipt.chapter.number}
+            </Link>
+          )}
+
+          <Link
+            className="button secondary"
+            to="/profile"
+          >
             Back to Profile
           </Link>
 
-          <button
-            type="button"
-            className="button secondary"
-            onClick={() => navigate('/checkout')}
+          <Link
+            className="text-button"
+            to="/checkout"
           >
             Top Up Again
-          </button>
+          </Link>
         </div>
       </main>
     );
@@ -766,246 +973,252 @@ export function CheckoutPage() {
     <main className="page q-checkout-page">
       <div className="q-screen-heading">
         <Link
-          to="/profile"
+          to={
+            target
+              ? `/title/${target.mangaId}`
+              : '/profile'
+          }
           className="icon-button"
-          aria-label="Back to profile"
+          aria-label="Back"
         >
           <Icon name="back" />
         </Link>
 
         <h1>
-          {chapter
-            ? 'Unlock Chapter 43'
+          {target
+            ? `Unlock Chapter ${target.number}`
             : 'Checkout & Diamond Pay'}
         </h1>
-
-        <a
-          className="icon-button"
-          href="#checkout-help"
-          aria-label="Checkout help"
-        >
-          <Icon name="info" />
-        </a>
       </div>
 
       <p className="q-demo-notice">
-        <strong>Demo checkout</strong> — no real payment is
-        collected. Diamond balances and sample unlocks are stored
-        on this device.
+        <strong>Demo checkout</strong> — no money is
+        charged. Balances and unlocks stay on this device.
       </p>
 
-      {!chapter && (
-        <Link
-          className="text-button q-demo-unlock-link"
-          to="/checkout?chapter=43"
-        >
-          Preview Chapter 43 unlock
-        </Link>
+      {chapterId && !ready && !error && (
+        <Loading text="Checking the selected chapter…" />
       )}
 
-      <div className="q-lock-panel">
-        <div>
-          <span className="q-wallet-icon">
-            <MiniIcon name={chapter ? 'lock' : 'diamond'} />
-          </span>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
 
-          <h2>
-            {chapter
-              ? `Chapter 43 is ${cost ? 'Locked' : 'Unlocked'}`
-              : 'Top Up Your Diamonds'}
-          </h2>
+      {ready && (
+        <>
+          <div className="q-lock-panel">
+            <h2>
+              {target
+                ? `${target.mangaTitle} · Chapter ${target.number}`
+                : 'Top Up Your Diamonds'}
+            </h2>
 
-          {chapter && (
-            <span className="q-lock-label">
-              {cost ? 'LOCKED' : 'UNLOCKED'}
-            </span>
-          )}
-        </div>
-
-        <div className="q-balance-strip">
-          <span>
-            Balance: <strong>{balance}</strong>
-            <MiniIcon name="diamond" size={13} />
-          </span>
-          <span>
-            Required: <strong>{cost}</strong>
-            <MiniIcon name="diamond" size={13} />
-          </span>
-        </div>
-      </div>
-
-      <form onSubmit={pay}>
-        <fieldset className="q-choice-group">
-          <legend>1. CHOOSE DIAMOND PACK</legend>
-
-          {packs.map(option => (
-            <label
-              key={option.id}
-              className={`q-pack-option ${
-                packId === option.id ? 'is-selected' : ''
-              }`}
-            >
-              <input
-                type="radio"
-                name="diamond-pack"
-                value={option.id}
-                checked={packId === option.id}
-                onChange={() => setPackId(option.id)}
-              />
-
-              <span className="q-pack-name">{option.name}</span>
-
-              <span className="q-diamond-count">
-                {option.diamonds}
-                <MiniIcon name="diamond" size={13} />
+            <div className="q-balance-strip">
+              <span>
+                Balance: {balance} diamonds
               </span>
 
-              {option.bonus > 0 && (
-                <span className="q-pack-bonus">
-                  +{option.bonus}
-                  <br />
-                  Bonus
-                </span>
-              )}
-
-              <span className="q-pack-price">₱{option.price}</span>
-
-              {option.id === 'reader' && (
-                <span className="q-popular">MOST POPULAR</span>
-              )}
-            </label>
-          ))}
-        </fieldset>
-
-        <fieldset className="q-choice-group">
-          <legend>2. PAYMENT METHOD</legend>
-
-          {methods.map(method => (
-            <label
-              key={method.id}
-              className={`q-payment-option ${
-                methodId === method.id ? 'is-selected' : ''
-              }`}
-            >
-              <img
-                src={method.image}
-                width="40"
-                height="40"
-                alt=""
-              />
-
-              <span>{method.name}</span>
-
-              <input
-                type="radio"
-                name="payment-method"
-                value={method.id}
-                checked={methodId === method.id}
-                onChange={() => setMethodId(method.id)}
-              />
-            </label>
-          ))}
-        </fieldset>
-
-        <section className="q-order-section">
-          <h2>3. ORDER SUMMARY</h2>
-
-          <div className="q-order-summary">
-            <div className="q-summary-pack">
-              <span>{pack.name}</span>
-              <strong>{money(pack.price)}</strong>
+              <span>
+                Required: {cost} diamonds
+              </span>
             </div>
 
-            <dl>
-              <div>
-                <dt>{pack.name}</dt>
-                <dd>+{pack.diamonds + pack.bonus} Diamonds</dd>
-              </div>
+            {target && (
+              cost ? (
+                balance >= 30 && (
+                  <button
+                    type="button"
+                    className="button primary full-width"
+                    onClick={() => unlockDemo(target)}
+                  >
+                    Use 30 demo diamonds
+                  </button>
+                )
+              ) : (
+                <Link
+                  className="button primary full-width"
+                  to={readLink}
+                >
+                  Read Chapter {target.number}
+                </Link>
+              )
+            )}
 
-              {chapter && (
-                <div>
-                  <dt>Chapter 43 Unlock Cost</dt>
-                  <dd>-{cost} Diamonds</dd>
-                </div>
-              )}
-
-              <div>
-                <dt>Remaining Diamond Balance</dt>
-                <dd>{remaining} Diamonds</dd>
-              </div>
-
-              <div className="q-summary-total">
-                <dt>Total Due Today</dt>
-                <dd>{money(pack.price)}</dd>
-              </div>
-            </dl>
-
-            <p className="q-payment-note">
-              <MiniIcon name="lock" size={14} />
-              Simulation only · No payment details needed
-            </p>
+            {target && cost > 0 && (
+              <Link
+                className="text-button"
+                to={readLink}
+              >
+                Daily Free Pass
+              </Link>
+            )}
           </div>
-        </section>
 
-        {error && (
-          <p className="form-error" role="alert">{error}</p>
-        )}
+          <form onSubmit={pay}>
+            <fieldset className="q-choice-group">
+              <legend>
+                1. CHOOSE DIAMOND PACK
+              </legend>
 
-        <button
-          className="button primary full-width q-pay-button"
-          type="submit"
-        >
-          Demo: Pay {money(pack.price)}
-          {chapter && cost ? ' & Unlock Chapter 43' : ''}
-        </button>
-      </form>
+              {packs.map(option => (
+                <label
+                  key={option.id}
+                  className={`q-pack-option ${
+                    packId === option.id
+                      ? 'is-selected'
+                      : ''
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="diamond-pack"
+                    value={option.id}
+                    checked={packId === option.id}
+                    onChange={() =>
+                      setPackId(option.id)
+                    }
+                  />
 
-      <section className="q-checkout-help" id="checkout-help">
-        <h2>Need Help with Your Order?</h2>
-        <p>
-          This checkout demonstrates your Figma payment flow.
-          Real GCash, Maya, and card payments require a connected
-          payment provider.
-        </p>
+                  <span className="q-pack-name">
+                    {option.name}
+                  </span>
 
-        <div>
-          <Link className="button secondary" to="/about">
-            Help & Support
-          </Link>
-          <a className="button secondary" href="#checkout-faq">
-            View FAQ
-          </a>
-        </div>
-      </section>
+                  <span className="q-diamond-count">
+                    {option.diamonds}
+                    <MiniIcon
+                      name="diamond"
+                      size={13}
+                    />
+                  </span>
 
-      <section id="checkout-faq" className="q-checkout-faq">
-        <details>
-          <summary>Will I be charged?</summary>
-          <p>
-            No. The button creates a demo receipt and adds demo
-            diamonds on this device.
-          </p>
-        </details>
+                  {option.bonus > 0 && (
+                    <span className="q-pack-bonus">
+                      +{option.bonus}
+                      <br />
+                      Bonus
+                    </span>
+                  )}
 
-        <details>
-          <summary>Does this lock live manhwa chapters?</summary>
-          <p>
-            No. Chapter 43 is a sample checkout scenario. The
-            existing MangaDex reader stays freely accessible.
-          </p>
-        </details>
+                  <span className="q-pack-price">
+                    ₱{option.price}
+                  </span>
 
-        <details>
-          <summary>
-            Can I preview the chapter-unlock screen?
-          </summary>
-          <p>
-            <Link to="/checkout?chapter=43">
-              Open the Chapter 43 checkout example
-            </Link>
-          </p>
-        </details>
-      </section>
+                  {option.id === 'reader' && (
+                    <span className="q-popular">
+                      MOST POPULAR
+                    </span>
+                  )}
+                </label>
+              ))}
+            </fieldset>
+
+            <fieldset className="q-choice-group">
+              <legend>
+                2. PAYMENT METHOD
+              </legend>
+
+              {methods.map(method => (
+                <label
+                  key={method.id}
+                  className={`q-payment-option ${
+                    methodId === method.id
+                      ? 'is-selected'
+                      : ''
+                  }`}
+                >
+                  <img
+                    src={method.image}
+                    width="40"
+                    height="40"
+                    alt=""
+                  />
+
+                  <span>{method.name}</span>
+
+                  <input
+                    type="radio"
+                    name="payment-method"
+                    value={method.id}
+                    checked={methodId === method.id}
+                    onChange={() =>
+                      setMethodId(method.id)
+                    }
+                  />
+                </label>
+              ))}
+            </fieldset>
+
+            <section className="q-order-section">
+              <h2>3. ORDER SUMMARY</h2>
+
+              <div className="q-order-summary">
+                <dl>
+                  <div>
+                    <dt>{pack.name}</dt>
+
+                    <dd>
+                      +{pack.diamonds + pack.bonus}
+                      {' '}Diamonds
+                    </dd>
+                  </div>
+
+                  {target && (
+                    <div>
+                      <dt>
+                        Chapter {target.number}
+                        {' '}Unlock Cost
+                      </dt>
+
+                      <dd>-{cost} Diamonds</dd>
+                    </div>
+                  )}
+
+                  <div>
+                    <dt>
+                      Remaining Diamond Balance
+                    </dt>
+
+                    <dd>
+                      {remaining} Diamonds
+                    </dd>
+                  </div>
+
+                  <div className="q-summary-total">
+                    <dt>Simulated total</dt>
+                    <dd>{money(pack.price)}</dd>
+                  </div>
+                </dl>
+
+                <p className="q-payment-note">
+                  Simulation only · No payment
+                  details needed
+                </p>
+              </div>
+            </section>
+
+            <button
+              className="button primary full-width q-pay-button"
+              type="submit"
+            >
+              Demo: Pay {money(pack.price)}
+              {cost
+                ? ` & Unlock Chapter ${target.number}`
+                : ''}
+            </button>
+          </form>
+        </>
+      )}
+
+      <p className="q-secondary-note">
+        For this student demo, the latest three
+        available chapters use diamond locks;
+        the first available chapter stays free.
+        Real payments and secure access require
+        a payment provider and server-side
+        verification.
+      </p>
     </main>
   );
 }

@@ -47,15 +47,51 @@ test('Catalogue requests enforce Korean originals, English availability, and the
   const result = await handleContent(request({ action: 'catalog', q: 'Fixture search' }), 'GET', mock);
   assert.equal(result.status, 200);
   assert.equal(seen.searchParams.get('originalLanguage[]'), 'ko');
-  assert.equal(seen.searchParams.get('availableTranslatedLanguage[]'), 'en');
+  assert.equal(
+  seen.searchParams.has('availableTranslatedLanguage[]'),
+  false
+);
   assert.equal(seen.searchParams.get('contentRating[]'), 'safe');
 });
-test('Non-English and external-only chapters are rejected before image requests', async () => {
-  for (const [n, attributes] of [[3, { translatedLanguage: 'ru' }], [4, { externalUrl: 'https://publisher.example/chapter' }], [5, { pages: 0 }]]) {
-    const cId = `${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`;
+test('External-only chapters and chapters without image pages are rejected', async () => {
+  const cases = [
+    [4, { externalUrl: 'https://publisher.example/chapter' }],
+    [5, { pages: 0 }],
+  ];
+
+  for (const [n, attributes] of cases) {
+    const cId =
+      `${n}${n}${n}${n}${n}${n}${n}${n}` +
+      '-1111-4111-8111-111111111111';
+
     let calls = 0;
-    const mock = async () => { calls++; return Response.json({ result: 'ok', data: { ...chapter, id: cId, attributes: { ...chapter.attributes, ...attributes } } }); };
-    const result = await handleContent(request({ action: 'chapter', id: cId }), 'GET', mock);
-    assert.equal(result.status, 404); assert.equal(calls, 1);
+
+    const mock = async () => {
+      calls++;
+
+      return Response.json({
+        result: 'ok',
+        data: {
+          ...chapter,
+          id: cId,
+          attributes: {
+            ...chapter.attributes,
+            ...attributes,
+          },
+        },
+      });
+    };
+
+    const result = await handleContent(
+      request({
+        action: 'chapter',
+        id: cId,
+      }),
+      'GET',
+      mock
+    );
+
+    assert.equal(result.status, 404);
+    assert.equal(calls, 1);
   }
 });

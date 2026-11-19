@@ -66,6 +66,15 @@ export function normalizeManga(manga) {
     status: a.status, year: a.year,
     authors: manga.relationships?.filter(r => r.type === 'author').map(r => r.attributes?.name).filter(Boolean) || [],
     lastChapter: a.lastChapter || null,
+languages: [
+  ...new Set(
+    (a.availableTranslatedLanguages || []).filter(
+      code =>
+        typeof code === 'string' &&
+        /^[a-z]{2}(?:-[a-z]{2})?$/.test(code)
+    )
+  ),
+],
     sourceUrl: `https://mangadex.org/title/${manga.id}`,
   };
 }
@@ -137,7 +146,7 @@ export async function handleContent(url, method = 'GET', fetcher = fetch) {
       case 'catalog': {
         const offset = number(q.get('offset'), 0, 0, 9900);
         const title = (q.get('q') || '').trim().slice(0, 100);
-        const params = { limit: 20, offset, 'originalLanguage[]': ['ko'], 'availableTranslatedLanguage[]': ['en'],
+        const params = { limit: 20, offset, 'originalLanguage[]': ['ko'],
           'contentRating[]': ['safe'], 'includes[]': ['cover_art', 'author'],
           [q.get('sort') === 'latest' ? 'order[latestUploadedChapter]' : 'order[followedCount]']: 'desc', hasAvailableChapters: true };
         if (title) params.title = title;
@@ -146,34 +155,55 @@ export async function handleContent(url, method = 'GET', fetcher = fetch) {
         return json({ items: data.data.map(normalizeManga), total: data.total, offset, limit: 20 });
       }
       case 'manga': return json(normalizeManga(await safeManga(q.get('id'), fetcher)));
-           case 'chapters': {
+                 case 'chapters': {
         const mangaId = id(q.get('id'));
+        const language = (q.get('lang') || 'en').toLowerCase();
+
+        if (!/^[a-z]{2}(?:-[a-z]{2})?$/.test(language)) {
+          throw new ContentError(
+            'Select a valid chapter language.',
+            400
+          );
+        }
+
         await safeManga(mangaId, fetcher);
 
-        const offset = number(q.get('offset'), 0, 0, 9900);
+        const offset = number(
+          q.get('offset'),
+          0,
+          0,
+          9900
+        );
 
-        const data = await api(`/manga/${mangaId}/feed`, {
-          limit: 100,
-          offset,
-          'translatedLanguage[]': ['en'],
-          'contentRating[]': ['safe'],
-          'includes[]': ['scanlation_group'],
+        const data = await api(
+          `/manga/${mangaId}/feed`,
+          {
+            limit: 100,
+            offset,
+            'translatedLanguage[]': [language],
+            'contentRating[]': ['safe'],
+            'includes[]': ['scanlation_group'],
 
-          ...(q.get('sort') === 'latest'
-            ? { 'order[publishAt]': 'desc' }
-            : {
-                'order[chapter]': 'asc',
-                'order[volume]': 'asc',
-              }),
+            ...(q.get('sort') === 'latest'
+              ? { 'order[publishAt]': 'desc' }
+              : {
+                  'order[chapter]': 'asc',
+                  'order[volume]': 'asc',
+                }),
 
-          includeExternalUrl: 0,
-          includeEmptyPages: 0,
-        }, 60000, fetcher);
+            includeExternalUrl: 0,
+            includeEmptyPages: 0,
+            includeFuturePublishAt: 0,
+          },
+          60000,
+          fetcher
+        );
 
         return json({
           items: data.data
             .filter(
               chapter =>
+                chapter.attributes.translatedLanguage === language &&
                 chapter.attributes.pages > 0 &&
                 !chapter.attributes.externalUrl
             )
@@ -187,7 +217,10 @@ export async function handleContent(url, method = 'GET', fetcher = fetch) {
         const chapterId = id(q.get('id'));
         const { chapter, manga } = await safeChapter(chapterId, fetcher);
         const data = await manifest(chapterId, fetcher);
-        return json({ chapter: normalizeChapter(chapter), manga: normalizeManga(manga),
+        return json({ chapter: normalizeChapter(chapter), manga: {
+  ...normalizeManga(manga),
+  readingLanguage: chapter.attributes.translatedLanguage,
+},
           pages: data.chapter.dataSaver.map((_, page) => `/api/content?action=image&kind=page&id=${chapterId}&page=${page}`) });
       }
       case 'image': {

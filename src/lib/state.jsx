@@ -12,7 +12,16 @@ function readLocal() {
     return data && Array.isArray(data.bookmarks) && Array.isArray(data.history) ? data : empty();
   } catch { return empty(); }
 }
-const slim = manga => ({ id: manga.id, title: manga.title, cover: manga.cover, tags: manga.tags, authors: manga.authors || [] });
+const slim = manga => ({
+  id: manga.id,
+  title: manga.title,
+  cover: manga.cover,
+  tags: manga.tags,
+  authors: manga.authors || [],
+  sourceUrl: manga.sourceUrl || null,
+  languages: manga.languages || [],
+  readingLanguage: manga.readingLanguage || null,
+});
 
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
